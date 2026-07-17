@@ -1,1 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
 venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Pytest
+.pytest_cache/
+
+# Coverage Reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Logs
+*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Variables
+.env
+
+# Build Artifacts
+build/
+dist/
+*.egg-info/
+
+# Docker
+*.tar
+
+# Miscellaneous
+.cache/
