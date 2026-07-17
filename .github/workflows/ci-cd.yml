@@ -36,7 +36,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
 
       - name: Verify Python Environment
         run: |
@@ -73,7 +74,7 @@ jobs:
 
           docker build \
             -t $IMAGE:latest \
-            -t $IMAGE:${{ github.sha }} \
+            -t $IMAGE:${GITHUB_SHA::7} \
             .
 
       - name: Push Docker Image
@@ -81,34 +82,80 @@ jobs:
           IMAGE=ghcr.io/${{ steps.vars.outputs.owner }}/${{ env.IMAGE_NAME }}
 
           docker push $IMAGE:latest
-          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:${GITHUB_SHA::7}
 
-      - name: Deploy to EC2
+      - name: Deploy to Ubuntu EC2
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            IMAGE=ghcr.io/${{ steps.vars.outputs.owner }}/${{ env.IMAGE_NAME }}:latest
+            set -e
 
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-              -u "${{ github.actor }}" \
+            OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            IMAGE=ghcr.io/$OWNER/${{ env.IMAGE_NAME }}:latest
+
+            echo "========== Checking Docker =========="
+
+            if ! command -v docker >/dev/null 2>&1
+            then
+              echo "Docker not found. Installing..."
+
+              sudo apt-get update
+
+              sudo apt-get install -y \
+                ca-certificates \
+                curl \
+                gnupg \
+                lsb-release \
+                docker.io
+
+              sudo systemctl enable docker
+              sudo systemctl start docker
+
+              sudo usermod -aG docker $USER
+
+              echo "Docker Installed Successfully"
+            else
+              echo "Docker Already Installed"
+            fi
+
+            sudo systemctl start docker
+
+            echo "========== Docker Version =========="
+            sudo docker --version
+
+            echo "========== Login to GHCR =========="
+
+            echo "${{ secrets.GHCR_PAT }}" | sudo docker login ghcr.io \
+              -u "${{ github.repository_owner }}" \
               --password-stdin
 
-            docker pull $IMAGE
+            echo "========== Pull Latest Image =========="
+            sudo docker pull $IMAGE
 
-            docker stop flask-app || true
-            docker rm flask-app || true
+            echo "========== Stop Existing Container =========="
+            sudo docker stop flask-app || true
+            sudo docker rm flask-app || true
 
-            docker run -d \
+            echo "========== Run Container =========="
+            sudo docker run -d \
               --name flask-app \
               --restart unless-stopped \
               -p 80:5000 \
               $IMAGE
 
-            sleep 10
+            echo "Waiting for application..."
+            sleep 15
 
+            echo "========== Health Check =========="
             curl --fail http://localhost/health
 
-            docker image prune -f
+            echo "========== Running Containers =========="
+            sudo docker ps
+
+            echo "========== Cleanup =========="
+            sudo docker image prune -f
+
+            echo "========== Deployment Successful =========="
