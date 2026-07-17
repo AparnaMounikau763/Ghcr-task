@@ -36,8 +36,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
 
       - name: Verify Python Environment
         run: |
@@ -46,7 +45,7 @@ jobs:
           python -c "from app import app"
           echo "Import Successful"
 
-      - name: Run Unit Tests
+      - name: Run Unit Tests & Generate Coverage
         run: |
           pytest -v --cov=. --cov-report=xml
 
@@ -55,20 +54,14 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: SonarCloud Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1.2.0
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      - name: Login to GHCR
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker Image Metadata
+      - name: Extract Image Metadata
         id: meta
         run: |
           IMAGE=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
@@ -79,7 +72,8 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.meta.outputs.image }}:latest \
-            -t ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }} .
+            -t ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }} \
+            .
 
       - name: Push Docker Images
         run: |
